@@ -20,7 +20,7 @@ from app import create_app, db as _db
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-MASTER = "SuperSecret!99"
+MASTER = "contraseña"
 FERNET_KEY = Fernet.generate_key()
 
 
