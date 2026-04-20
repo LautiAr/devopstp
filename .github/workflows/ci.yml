@@ -25,7 +25,7 @@ jobs:
         run: pip install -r requirements.txt
  
       - name: Run passing tests only
-        run: pytest test_app.py -m "not failing" -v --tb=short
+        run: pytest test.py -m "not failing" -v --tb=short
  
   docker:
     name: Build Docker image
