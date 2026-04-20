@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    container_name: passmanager_api
+    ports:
+      - "5000:5000"
+    volumes:
+      - db_data:/app/instance
+    environment:
+      - FLASK_ENV=development
+      - SENTRY_DSN=${SENTRY_DSN:-}          # set in .env or shell
+      - FERNET_KEY=${FERNET_KEY:-}          # set in .env or auto-generated
+    restart: unless-stopped
+ 
+volumes:
+  db_data:
+ 
