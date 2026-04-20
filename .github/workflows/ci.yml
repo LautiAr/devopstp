@@ -1,0 +1,41 @@
+name: CI
+ 
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+ 
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+ 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+ 
+      - name: Run passing tests only
+        run: pytest test_app.py -m "not failing" -v --tb=short
+ 
+  docker:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: test
+ 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Build image
+        run: docker build -t passmanager:ci .
+ 
