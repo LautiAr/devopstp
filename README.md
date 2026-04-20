@@ -37,10 +37,20 @@ Una API REST para guardar y gestionar credenciales de forma segura, construida c
 
 ### Opción A — Docker
 
+#### Desde GitHub
+
 ```bash
 cp .env.example .env
 # Completar FERNET_KEY y opcionalmente SENTRY_DSN en el archivo .env
 docker compose up --build
+```
+
+#### Desde DockerHub
+
+```bash
+docker pull lautiar/passmanager:latest
+# Completar FERNET_KEY y opcionalmente SENTRY_DSN en el archivo .env
+docker run -p 5000:5000 lautiar/passmanager:latest
 ```
 
 ### Opción B — Python local

@@ -1,6 +1,6 @@
 services:
   api:
-    build: .
+    image: lautiar/passmanager:latest
     container_name: passmanager_api
     ports:
       - "5000:5000"
@@ -8,9 +8,9 @@ services:
       - db_data:/app/instance
     environment:
       - FLASK_ENV=development
-      - SENTRY_DSN=${SENTRY_DSN:-}          # set in .env or shell
-      - FERNET_KEY=${FERNET_KEY:-}          # set in .env or auto-generated
- 
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - FERNET_KEY=${FERNET_KEY:-}
+
 volumes:
   db_data:
  
