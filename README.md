@@ -80,7 +80,7 @@ Pegar el resultado en el archivo `.env`.
 ```
 passmanager/
 ├── app.py                         # Aplicación principal
-├── test_app.py                    # 50 tests (45 pasan + 5 fallan intencionalmente)
+├── test.py                    # 50 tests (45 pasan + 5 fallan intencionalmente)
 ├── pytest.ini                     # Configuración de pytest
 ├── Dockerfile
 ├── docker-compose.yml
@@ -663,13 +663,13 @@ Las entradas con puntaje menor a 3 se reportan en `/metrics`.
 pip install -r requirements.txt
 
 # Correr todos los tests
-pytest test_app.py -v
+pytest test.py -v
 
 # Solo los tests que pasan (igual que en CI)
-pytest test_app.py -m "not failing" -v
+pytest test.py -m "not failing" -v
 
 # Solo los tests que fallan intencionalmente (para demo de Sentry)
-pytest test_app.py -m failing -v
+pytest test.py -m failing -v
 ```
 
 La suite tiene 50 tests divididos en dos grupos:
