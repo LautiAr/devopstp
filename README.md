@@ -16,10 +16,10 @@ Una API REST para guardar y gestionar credenciales de forma segura, construida c
   - [Herramientas de contraseñas](#herramientas-de-contraseñas)
   - [Métricas](#métricas)
   - [Registro de auditoría](#registro-de-auditoría)
-  - [Cordón Andon](#cordón-andon)
+  - [Andon Cord](#andon-cord)
 - [Errores](#errores)
 - [Puntaje de seguridad](#puntaje-de-seguridad)
-- [Tests](#tests)
+- [Tests](#tests)`
 - [CI/CD](#cicd)
 
 ---
@@ -518,11 +518,11 @@ curl http://localhost:5000/audit
 
 ---
 
-### Cordón Andon
+### Andon Cord
 
-El Cordón Andon es un concepto de manufactura lean: cualquier persona del equipo puede "tirar del cordón" para detener la línea de producción cuando detecta un problema de calidad. Mientras esté activo, todas las operaciones de escritura (`POST`, `PATCH`, `DELETE`) devuelven `503`. Las operaciones de lectura (`GET`) siguen funcionando. El sistema se reanuda recién cuando todos los alertas estén resueltos.
+Cuando este activo (`POST`, `PATCH`, `DELETE`) devuelven `503`. Las operaciones de lectura (`GET`) siguen funcionando. El sistema se reanuda recién cuando todos los alertas estén resueltos.
 
-#### `POST /andon/pull` — Activar el cordón
+#### `POST /andon/pull` — Activar el cord
 
 Levanta una alerta y detiene todas las escrituras. Si Sentry está configurado, también se envía el evento allí.
 
@@ -620,7 +620,7 @@ Todos los errores devuelven JSON con la misma estructura.
 | `405` | Método HTTP no permitido en esa ruta |
 | `409` | El recurso ya está en el estado solicitado |
 | `422` | Regla de negocio violada |
-| `503` | Cordón Andon activo — escrituras detenidas |
+| `503` | Andon cord activo — escrituras detenidas |
 
 **Ejemplo**
 ```json
@@ -674,7 +674,7 @@ pytest test.py -m failing -v
 
 La suite tiene 50 tests divididos en dos grupos:
 
-**45 tests que pasan** — cubren todos los flujos normales, casos de error, cifrado/descifrado, autenticación, cordón Andon, métricas y auditoría.
+**45 tests que pasan** — cubren todos los flujos normales, casos de error, cifrado/descifrado, autenticación, Andon cord, métricas y auditoría.
 
 **5 fallos intencionales** (`TestIntentionalFailures`) — simulan bugs reales de producción (aceptar contraseñas débiles, entradas duplicadas, auditoría GDPR) para poblar el dashboard de Sentry durante la presentación.
 
