@@ -257,7 +257,9 @@ def _verify_master(vault: Vault, master: str) -> bool:
 
 def create_app(config=None):
     app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///passmanager.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL", "sqlite:////tmp/passmanager.db"
+    )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["ANDON_ACTIVE"] = False
     app.config["FERNET_KEY"] = os.environ.get("FERNET_KEY", Fernet.generate_key())
