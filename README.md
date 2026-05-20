@@ -19,7 +19,7 @@ Una API REST para guardar y gestionar credenciales de forma segura, construida c
   - [Andon Cord](#andon-cord)
 - [Errores](#errores)
 - [Puntaje de seguridad](#puntaje-de-seguridad)
-- [Tests](#tests)`
+- [Tests](#tests)
 - [CI/CD](#cicd)
 
 ---
