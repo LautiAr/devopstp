@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, g, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from sentry_sdk.integrations.flask import FlaskIntegration
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Sentry ────────────────────────────────────────────────────────────────────
 load_dotenv()
@@ -272,6 +273,11 @@ def create_app(config=None):
         db.create_all()
 
     _register_routes(app, db)
+
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app, x_for=1, x_proto=1, x_host=1
+    )  # Devuelve IP Real, no proxy
+
     return app
 
 
@@ -525,7 +531,6 @@ def _register_routes(app, db):
 
         return jsonify(
             {
-                "concepto": "Segundo Camino: feedback y visibilidad",
                 "vaults": total_vaults,
                 "entradas": {
                     "total": total_entries,
@@ -553,7 +558,6 @@ def _register_routes(app, db):
         logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all()
         return jsonify(
             {
-                "concepto": "Tercer Camino",
                 "total": len(logs),
                 "logs": [l.to_dict() for l in logs],
             }
@@ -581,7 +585,6 @@ def _register_routes(app, db):
         db.session.commit()
         return jsonify(
             {
-                "concepto": "Cordón Andon: detener la línea para proteger la calidad",
                 "alerta": event.to_dict(),
                 "sistema_detenido": True,
             }
@@ -599,7 +602,6 @@ def _register_routes(app, db):
         app.config["ANDON_ACTIVE"] = open_alerts > 0
         return jsonify(
             {
-                "concepto": "Tercer Camino",
                 "alerta": event.to_dict(),
                 "sistema_detenido": app.config["ANDON_ACTIVE"],
             }
@@ -610,7 +612,6 @@ def _register_routes(app, db):
         events = AndonEvent.query.order_by(AndonEvent.raised_at.desc()).all()
         return jsonify(
             {
-                "concepto": "Tercer Camino",
                 "eventos": [e.to_dict() for e in events],
             }
         ), 200
