@@ -17,7 +17,6 @@ load_dotenv()
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 
-
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
@@ -123,7 +122,7 @@ class Vault(db.Model):
             "entry_count": len(self.entries),
         }
         if include_entries:
-            d["entries"] = [e.to_dict() for e in self.entries]
+            d["entradas"] = [e.to_dict() for e in self.entries]
         return d
 
 

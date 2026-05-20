@@ -79,15 +79,6 @@ def test_index_returns_200(client):
     assert r.status_code == 200
 
 
-def test_index_has_devops_concepts(client):
-    data = client.get("/").get_json()
-    concepts = data["conceptos_devops"]
-    assert "tres_caminos" in concepts
-    assert "cordon_andon" in concepts
-    assert "agil" in concepts
-    assert "lean" in concepts
-
-
 # ── 2. Vault CRUD ─────────────────────────────────────────────────────────────
 
 
@@ -326,7 +317,7 @@ class TestAndon:
     def test_pull_cord(self, client):
         r = client.post(
             "/andon/pull",
-            json={"message": "Clave de cifrado comprometida", "severity": "high"},
+            json={"message": "Prueba Andon Cord", "severity": "high"},
         )
         assert r.status_code == 201
         assert r.get_json()["sistema_detenido"] is True

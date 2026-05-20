@@ -80,7 +80,7 @@ Pegar el resultado en el archivo `.env`.
 ```
 passmanager/
 ├── app.py                         # Aplicación principal
-├── test.py                    # 50 tests (45 pasan + 5 fallan intencionalmente)
+├── test.py                    # 49 tests (44 pasan + 5 fallan intencionalmente)
 ├── pytest.ini                     # Configuración de pytest
 ├── Dockerfile
 ├── docker-compose.yml
@@ -672,9 +672,9 @@ pytest test.py -m "not failing" -v
 pytest test.py -m failing -v
 ```
 
-La suite tiene 50 tests divididos en dos grupos:
+La suite tiene 49 tests divididos en dos grupos:
 
-**45 tests que pasan** — cubren todos los flujos normales, casos de error, cifrado/descifrado, autenticación, Andon cord, métricas y auditoría.
+**44 tests que pasan** — cubren todos los flujos normales, casos de error, cifrado/descifrado, autenticación, Andon cord, métricas y auditoría.
 
 **5 fallos intencionales** (`TestIntentionalFailures`) — simulan bugs reales de producción (aceptar contraseñas débiles, entradas duplicadas, auditoría GDPR) para poblar el dashboard de Sentry durante la presentación.
 
