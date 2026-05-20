@@ -541,7 +541,6 @@ def _register_routes(app, db):
                     "desperdicio_pct": round(weak_entries / total_entries * 100, 1)
                     if total_entries
                     else 0,
-                    "nota": "Lean: las contraseñas débiles son desperdicio",
                 },
                 "seguridad": {
                     "eventos_auditoria": total_audits,
