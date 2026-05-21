@@ -45,7 +45,8 @@ Esta es la **versión avanzada** del trabajo práctico integrador de DevOps. La 
 ```bash
 cp .env.example .env
 # Completar FERNET_KEY y opcionalmente SENTRY_DSN en el archivo .env
-docker compose up --build
+docker compose up
+docker compose down -v # Para borrar todos los volumenes
 ```
 
 #### Desde Docker Hub
