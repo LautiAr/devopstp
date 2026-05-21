@@ -54,7 +54,6 @@ jobs:
       # Tags generados automáticamente:
       #   - "latest"      → solo en push a main (la rama por defecto)
       #   - "main"        → nombre de la rama
-      #   - "sha-<short>" → SHA corto del commit (ej: sha-a1b2c3d)
       #   - "sha-<long>"  → SHA completo, para trazabilidad
       - name: Extract metadata (tags, labels)
         id: meta
