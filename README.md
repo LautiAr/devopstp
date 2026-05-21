@@ -6,14 +6,54 @@ Esta es la **versión básica** del trabajo práctico.
 
 ---
 
-## Stack
+## Instalacion y ejecución
 
-- Python 3.12 + Flask
-- Almacenamiento: diccionario en memoria (se pierde al reiniciar)
-- Tests: pytest
-- Sentry para monitoreo (opcional)
-- Docker multi-stage + docker-compose
-- GitHub Actions para CI/CD
+### Opcion A — Docker 
+
+#### Desde GitHub
+
+```bash
+cp .env.example .env       # opcional: completar SENTRY_DSN
+docker compose up --build
+```
+
+#### Desde DockerHub
+```bash
+docker pull lautiar/task-api:latest
+# Completar opcionalmente SENTRY_DSN en el archivo .env
+docker run -p 5000:5000 lautiar/task-api:latest
+```
+
+### Opcion B — Python local
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+La API queda disponible en `http://localhost:5000`.
+
+---
+
+## Estructura
+
+```
+.
+├── app.py                  # API principal
+├── test.py             # Tests
+├── pytest.ini
+├── requirements.txt
+├── Dockerfile              # Multi-stage, usuario no-root, healthcheck
+├── docker-compose.yml
+├── .dockerignore
+├── .env.example
+├── .gitignore
+└── .github/
+    └── workflows/
+        └── ci.yml          # GitHub Actions
+```
 
 ---
 
@@ -29,6 +69,8 @@ Esta es la **versión básica** del trabajo práctico.
 | `GET` | `/tasks/<id>` | Ver una tarea |
 | `PATCH` | `/tasks/<id>` | Actualizar tarea |
 | `DELETE` | `/tasks/<id>` | Eliminar tarea |
+
+---
 
 ### Ejemplos
 
@@ -50,29 +92,7 @@ curl -X PATCH http://localhost:5000/tasks/1 \
 curl http://localhost:5000/metrics
 ```
 
----
-
-## Cómo correrlo
-
-### Con Docker 
-
-```bash
-cp .env.example .env       # opcional: completar SENTRY_DSN
-docker compose up --build
-```
-
-La API queda disponible en `http://localhost:5000`.
-
-### Con Python local
-
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
----
+--- 
 
 ## Tests
 
@@ -106,21 +126,3 @@ automáticamente a Sentry. Si no, la app arranca igual sin monitoreo.
 de servicio externo.
 
 ---
-
-## Estructura
-
-```
-.
-├── app.py                  # API principal
-├── test_app.py             # Tests
-├── pytest.ini
-├── requirements.txt
-├── Dockerfile              # Multi-stage, usuario no-root, healthcheck
-├── docker-compose.yml
-├── .dockerignore
-├── .env.example
-├── .gitignore
-└── .github/
-    └── workflows/
-        └── ci.yml          # GitHub Actions
-```
