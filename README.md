@@ -1,6 +1,8 @@
 # API Gestor de Contraseñas
 
-Una API REST para guardar y gestionar credenciales de forma segura, construida con Flask y SQLite.
+API REST para guardar y gestionar credenciales de forma segura. Construida con Flask, SQLite y cifrado AES-128 (Fernet).
+
+Esta es la **versión avanzada** del trabajo práctico integrador de DevOps. La versión básica (Task API en memoria) vive en la rama [`basic`](../../tree/basic).
 
 ---
 
@@ -11,7 +13,7 @@ Una API REST para guardar y gestionar credenciales de forma segura, construida c
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Endpoints](#endpoints)
   - [General](#general)
-  - [Vaults (bóvedas)](#vaults-bóvedas)
+  - [Vaults](#vaults)
   - [Entradas](#entradas)
   - [Herramientas de contraseñas](#herramientas-de-contraseñas)
   - [Métricas](#métricas)
@@ -26,10 +28,11 @@ Una API REST para guardar y gestionar credenciales de forma segura, construida c
 
 ## Seguridad
 
-- Las **contraseñas maestras** se guardan con hash bcrypt, nunca en texto plano.
-- Las **contraseñas almacenadas** se cifran con AES-256. Solo se descifran si se pide explícitamente con `?reveal=true`.
-- **Toda acción sensible** queda registrada en un log de auditoría.
+- Las **contraseñas maestras** de cada vault se guardan con hash bcrypt, nunca en texto plano.
+- Las **contraseñas almacenadas** dentro de cada vault se cifran con AES-128 (Fernet con HMAC-SHA256). Solo se descifran si se piden explícitamente con `?reveal=true`.
+- **Toda acción sensible** queda registrada en el log de auditoría.
 - La **contraseña maestra** se envía en cada petición como header `X-Master-Password`, nunca se guarda en sesión.
+- La clave de cifrado (`FERNET_KEY`) se inyecta como variable de entorno en runtime; no se commitea al repositorio.
 
 ---
 
@@ -45,12 +48,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
-#### Desde DockerHub
+#### Desde Docker Hub
 
 ```bash
 docker pull lautiar/passmanager:latest
-# Completar FERNET_KEY y opcionalmente SENTRY_DSN en el archivo .env
-docker run -p 5000:5000 lautiar/passmanager:latest
+docker run -p 5000:5000 \
+  -e FERNET_KEY="..." \
+  -e SENTRY_DSN="..." \
+  lautiar/passmanager:latest
 ```
 
 ### Opción B — Python local
@@ -80,10 +85,11 @@ Pegar el resultado en el archivo `.env`.
 ```
 passmanager/
 ├── app.py                         # Aplicación principal
-├── test.py                    # 49 tests (44 pasan + 5 fallan intencionalmente)
+├── test.py                        # 49 tests (44 pasan + 5 fallan intencionalmente)
 ├── pytest.ini                     # Configuración de pytest
-├── Dockerfile
+├── Dockerfile                     # Multi-stage build
 ├── docker-compose.yml
+├── .dockerignore
 ├── requirements.txt
 ├── .env.example                   # Plantilla de variables de entorno
 ├── .gitignore
@@ -101,7 +107,7 @@ Todos los requests y responses usan `application/json`. Los endpoints que accede
 ### Header de autenticación
 
 ```
-X-Master-Password: <contraseña-maestra>
+X-Master-Password: <contraseña-maestra-de-la-vault>
 ```
 
 ---
@@ -115,11 +121,28 @@ Devuelve un índice con todos los endpoints disponibles.
 **No requiere autenticación.**
 
 **Respuesta `200`**
-```json
+
+```
 {
-  "api": "Password Manager",
-  "version": "1.0",
-  "endpoints": { ... }
+  "api": "Gestor de Contraseñas",
+  "endpoints": {
+    "DELETE /vaults/<id>": "Eliminar vault",
+    "DELETE /vaults/<id>/entries/<eid>": "Eliminar entrada",
+    "GET  /andon/events": "Historial de eventos Andon",
+    "GET  /audit": "Log completo de auditoría",
+    "GET  /metrics": "Lean / Agile / Security",
+    "GET  /vaults/<id>": "Obtener vault (requiere header con la contraseña maestra)",
+    "GET  /vaults/<id>/entries": "Listar entradas",
+    "GET  /vaults/<id>/entries/<eid>": "Obtener entrada (opcionalmente revelar contraseña)",
+    "PATCH /vaults/<id>/entries/<eid>": "Actualizar entrada",
+    "POST /andon/pull": "Activar el Andon Cord",
+    "POST /andon/resolve/<id>": "Resolver alerta",
+    "POST /check-strength": "Verificar la fortaleza de una contraseña",
+    "POST /generate": "Generar una contraseña segura",
+    "POST /vaults": "Crear vault",
+    "POST /vaults/<id>/entries": "Guardar una nueva credencial"
+  },
+  "version": "1.0"
 }
 ```
 
@@ -127,18 +150,19 @@ Devuelve un índice con todos los endpoints disponibles.
 
 ### Vaults
 
-Una vault es un contenedor de credenciales protegido por una contraseña maestra. Al eliminar una vault se eliminan todas sus entradas.
+Una vault es un contenedor de credenciales protegido por una contraseña maestra. Al eliminar una vault se eliminan todas sus entradas en cascada.
 
 #### `POST /vaults` — Crear una vault
 
 **No requiere autenticación.**
 
 **Body**
+
 ```json
 {
   "name": "Personal",
-  "owner": "usuario",
-  "master_password": "contraseña"
+  "owner": "lautaro",
+  "master_password": "MiClav3Maestra!2025"
 }
 ```
 
@@ -146,47 +170,54 @@ Una vault es un contenedor de credenciales protegido por una contraseña maestra
 |---|---|---|---|
 | `name` | string | sí | Nombre de la vault |
 | `owner` | string | sí | Identificador del dueño |
-| `master_password` | string | sí | Contraseña maestra (se guarda con bcrypt) |
+| `master_password` | string | sí | Contraseña maestra (se hashea con bcrypt) |
 
 **Respuesta `201`**
+
 ```json
 {
   "id": 1,
   "name": "Personal",
-  "owner": "usuario",
-  "created_at": "2026-04-10T22:00:00.000000",
+  "owner": "lautaro",
+  "created_at": "2026-05-19T10:00:00.000000+00:00",
   "entry_count": 0
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X POST http://localhost:5000/vaults -H "Content-Type: application/json" -d '{"name": "Personal", "owner": "usuario", "master_password": "contraseña"}'
+curl -X POST http://localhost:5000/vaults \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Personal", "owner": "lautaro", "master_password": "MiClav3Maestra!2025"}'
 ```
 
 ---
 
 #### `GET /vaults/<id>` — Ver una vault
 
-Devuelve la vault con todas sus entradas.
+Devuelve la vault con todas sus entradas (las contraseñas no se incluyen descifradas en este endpoint).
 
 **Requiere `X-Master-Password`.**
 
 **Respuesta `200`**
+
 ```json
 {
   "id": 1,
   "name": "Personal",
-  "owner": "usuario",
-  "created_at": "2026-04-10T22:00:00.000000",
+  "owner": "lautaro",
+  "created_at": "2026-05-19T10:00:00.000000+00:00",
   "entry_count": 2,
-  "entries": [ ... ]
+  "entradas": [ ... ]
 }
 ```
 
 **Curl**
+
 ```bash
-curl http://localhost:5000/vaults/1 -H "X-Master-Password: contraseña"
+curl http://localhost:5000/vaults/1 \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
 
 ---
@@ -198,15 +229,18 @@ Elimina la vault y todas sus entradas de forma permanente.
 **Requiere `X-Master-Password`.**
 
 **Respuesta `200`**
+
 ```json
 {
-  "message": "Vault 1 deleted"
+  "mensaje": "Bóveda 1 eliminada"
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X DELETE http://localhost:5000/vaults/1 -H "X-Master-Password: contraseña"
+curl -X DELETE http://localhost:5000/vaults/1 \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
 
 ---
@@ -217,46 +251,50 @@ Una entrada guarda una credencial (servicio, usuario, contraseña cifrada) dentr
 
 #### `GET /vaults/<vault_id>/entries` — Listar entradas
 
-Lista todas las entradas de una vault. Las contraseñas nunca se incluyen en este listado.
+Lista todas las entradas de una vault. Las contraseñas nunca se incluyen en este listado, solo metadatos.
 
 **Requiere `X-Master-Password`.**
 
 **Respuesta `200`**
+
 ```json
 [
   {
     "id": 1,
     "vault_id": 1,
     "service": "github.com",
-    "username": "usuario",
-    "strength_score": 4,
-    "strength_label": "strong",
+    "username": "lautiar",
+    "strength_score": 5,
+    "strength_label": "muy_fuerte",
     "notes": "",
-    "created_at": "2026-04-10T22:00:00.000000",
-    "updated_at": "2026-04-10T22:00:00.000000"
+    "created_at": "2026-05-19T10:05:00.000000+00:00",
+    "updated_at": "2026-05-19T10:05:00.000000+00:00"
   }
 ]
 ```
 
 **Curl**
+
 ```bash
-curl http://localhost:5000/vaults/1/entries -H "X-Master-Password: contraseña"
+curl http://localhost:5000/vaults/1/entries \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
 
 ---
 
 #### `POST /vaults/<vault_id>/entries` — Guardar una credencial
 
-Almacena una nueva credencial. La contraseña se cifra con AES-256 antes de guardarse.
+Almacena una nueva credencial. La contraseña se cifra con AES-128 (Fernet) antes de guardarse.
 
 **Requiere `X-Master-Password`.**
 
 **Body**
+
 ```json
 {
   "service": "github.com",
-  "username": "usuario",
-  "password": "contraseña",
+  "username": "lautiar",
+  "password": "G!tHub$ecure2025!!",
   "notes": "Cuenta de trabajo"
 }
 ```
@@ -269,18 +307,19 @@ Almacena una nueva credencial. La contraseña se cifra con AES-256 antes de guar
 | `notes` | string | no | Notas opcionales |
 
 **Respuesta `201`**
+
 ```json
 {
   "id": 1,
   "vault_id": 1,
   "service": "github.com",
-  "username": "usuario",
-  "strength_score": 4,
-  "strength_label": "strong",
+  "username": "lautiar",
+  "strength_score": 5,
+  "strength_label": "muy_fuerte",
   "notes": "Cuenta de trabajo",
-  "created_at": "2026-04-10T22:00:00.000000",
-  "updated_at": "2026-04-10T22:00:00.000000",
-  "strength_check": {
+  "created_at": "2026-05-19T10:05:00.000000+00:00",
+  "updated_at": "2026-05-19T10:05:00.000000+00:00",
+  "verificacion_fortaleza": {
     "strong": true,
     "issues": []
   }
@@ -288,15 +327,19 @@ Almacena una nueva credencial. La contraseña se cifra con AES-256 antes de guar
 ```
 
 **Curl**
+
 ```bash
-curl -X POST http://localhost:5000/vaults/1/entries -H "Content-Type: application/json" -H "X-Master-Password: contraseña_nueva" -d '{"service": "github.com", "username": "usuario", "password": "contraseña", "notes": "Cuenta de trabajo"}'
+curl -X POST http://localhost:5000/vaults/1/entries \
+  -H "Content-Type: application/json" \
+  -H "X-Master-Password: MiClav3Maestra!2025" \
+  -d '{"service": "github.com", "username": "lautiar", "password": "G!tHub$ecure2025!!", "notes": "Cuenta de trabajo"}'
 ```
 
 ---
 
 #### `GET /vaults/<vault_id>/entries/<entry_id>` — Ver una entrada
 
-Devuelve una entrada. Por defecto la contraseña no se muestra. Agregar `?reveal=true` para descifrarla y devolverla.
+Devuelve una entrada. Por defecto la contraseña no se muestra. Agregar `?reveal=true` para descifrarla y devolverla en texto plano.
 
 **Requiere `X-Master-Password`.**
 
@@ -305,36 +348,47 @@ Devuelve una entrada. Por defecto la contraseña no se muestra. Agregar `?reveal
 | `reveal` | `true` / `false` | `false` | Incluir la contraseña descifrada en la respuesta |
 
 **Curl (sin contraseña)**
+
 ```bash
-curl http://localhost:5000/vaults/1/entries/1 -H "X-Master-Password: contraseña"
+curl http://localhost:5000/vaults/1/entries/1 \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
 
 **Curl (con contraseña descifrada)**
+
 ```bash
-curl "http://localhost:5000/vaults/1/entries/1?reveal=true" -H "X-Master-Password: contraseña"
+curl "http://localhost:5000/vaults/1/entries/1?reveal=true" \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
+
+Cada acceso (con o sin `reveal`) queda registrado en el log de auditoría.
 
 ---
 
 #### `PATCH /vaults/<vault_id>/entries/<entry_id>` — Actualizar una entrada
 
-Actualiza uno o más campos de una entrada. Todos los campos son opcionales. Si se cambia la contraseña, se re-cifra y se recalcula el puntaje de seguridad.
+Actualiza uno o más campos de una entrada. Todos los campos son opcionales. Si se cambia la contraseña, se re-cifra y se recalcula el puntaje de fortaleza.
 
 **Requiere `X-Master-Password`.**
 
 **Body (todos los campos opcionales)**
+
 ```json
 {
   "service": "github.com",
-  "username": "usuario@trabajo.com",
-  "password": "contraseña_nueva",
+  "username": "lautiar@trabajo.com",
+  "password": "NuevaP@ssw0rd2025!!",
   "notes": "Nota actualizada"
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X PATCH http://localhost:5000/vaults/1/entries/1 -H "Content-Type: application/json" -H "X-Master-Password: contraseña" -d '{"notes": "Nota actualizada", "password": "contraseña_nueva"}'
+curl -X PATCH http://localhost:5000/vaults/1/entries/1 \
+  -H "Content-Type: application/json" \
+  -H "X-Master-Password: MiClav3Maestra!2025" \
+  -d '{"notes": "Nota actualizada", "password": "NuevaP@ssw0rd2025!!"}'
 ```
 
 ---
@@ -344,15 +398,18 @@ curl -X PATCH http://localhost:5000/vaults/1/entries/1 -H "Content-Type: applica
 **Requiere `X-Master-Password`.**
 
 **Respuesta `200`**
+
 ```json
 {
-  "message": "Entry 1 deleted"
+  "mensaje": "Entrada 1 eliminada"
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X DELETE http://localhost:5000/vaults/1/entries/1 -H "X-Master-Password: contraseña"
+curl -X DELETE http://localhost:5000/vaults/1/entries/1 \
+  -H "X-Master-Password: MiClav3Maestra!2025"
 ```
 
 ---
@@ -363,9 +420,10 @@ Estos endpoints no requieren vault ni autenticación.
 
 #### `POST /generate` — Generar una contraseña
 
-Genera una contraseña segura usando el módulo `secrets` de Python.
+Genera una contraseña segura usando el módulo `secrets` de Python (CSPRNG).
 
 **Body (todos los campos opcionales)**
+
 ```json
 {
   "length": 24,
@@ -379,30 +437,35 @@ Genera una contraseña segura usando el módulo `secrets` de Python.
 | `symbols` | boolean | `true` | Incluir caracteres especiales |
 
 **Respuesta `200`**
+
 ```json
 {
-  "password": "aB3$kLm!nP9@qRsT",
-  "length": 20,
-  "score": 5,
-  "strength": {
+  "password": "X7$kP2@nQ9!mR4#vT8&jY3^L",
+  "longitud": 24,
+  "fortaleza": {
     "strong": true,
     "issues": []
-  }
+  },
+  "puntaje": 5
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X POST http://localhost:5000/generate -H "Content-Type: application/json" -d '{"length": 24, "symbols": true}'
+curl -X POST http://localhost:5000/generate \
+  -H "Content-Type: application/json" \
+  -d '{"length": 24, "symbols": true}'
 ```
 
 ---
 
-#### `POST /check-strength` — Verificar seguridad de una contraseña
+#### `POST /check-strength` — Verificar fortaleza de una contraseña
 
 Evalúa qué tan segura es una contraseña sin necesidad de guardarla.
 
 **Body**
+
 ```json
 {
   "password": "micontraseña123"
@@ -410,21 +473,25 @@ Evalúa qué tan segura es una contraseña sin necesidad de guardarla.
 ```
 
 **Respuesta `200`**
+
 ```json
 {
   "strong": false,
-  "score": 2,
-  "label": "fair",
   "issues": [
-    "At least one uppercase letter required",
-    "At least one special character required"
-  ]
+    "Se requiere al menos una letra mayúscula",
+    "Se requiere al menos un carácter especial"
+  ],
+  "puntaje": 2,
+  "etiqueta": "aceptable"
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X POST http://localhost:5000/check-strength -H "Content-Type: application/json" -d '{"password": "micontraseña123"}'
+curl -X POST http://localhost:5000/check-strength \
+  -H "Content-Type: application/json" \
+  -d '{"password": "micontraseña123"}'
 ```
 
 ---
@@ -433,39 +500,41 @@ curl -X POST http://localhost:5000/check-strength -H "Content-Type: application/
 
 #### `GET /metrics` — Ver métricas del sistema
 
-Devuelve un resumen en tiempo real del estado de seguridad del sistema: cantidad de contraseñas débiles, alertas abiertas, actividad reciente, entre otros.
+Devuelve un resumen en tiempo real del estado del sistema: cantidad de bóvedas, entradas, distribución por fortaleza, contraseñas débiles ("desperdicio" en términos Lean), alertas Andon y actividad reciente.
 
 **No requiere autenticación.**
 
 **Respuesta `200`**
+
 ```json
 {
   "vaults": 3,
-  "entries": {
+  "entradas": {
     "total": 12,
-    "by_strength": {
-      "very_weak": 1,
-      "weak": 2,
-      "fair": 1,
-      "good": 3,
-      "strong": 4,
-      "very_strong": 1
+    "por_fortaleza": {
+      "muy_debil": 1,
+      "debil": 2,
+      "aceptable": 1,
+      "buena": 3,
+      "fuerte": 4,
+      "muy_fuerte": 1
     }
   },
   "lean": {
-    "weak_entries": 3,
-    "waste_pct": 25.0
+    "entradas_debiles": 3,
+    "desperdicio_pct": 25.0,
   },
-  "security": {
-    "audit_events": 47,
-    "open_andon_alerts": 0,
-    "andon_active": false
+  "seguridad": {
+    "eventos_auditoria": 47,
+    "alertas_andon_abiertas": 0,
+    "andon_activo": false
   },
-  "recent_activity": [ ... ]
+  "actividad_reciente": [ ... ]
 }
 ```
 
 **Curl**
+
 ```bash
 curl http://localhost:5000/metrics
 ```
@@ -476,11 +545,12 @@ curl http://localhost:5000/metrics
 
 #### `GET /audit` — Ver el log de auditoría
 
-Devuelve los últimos 100 eventos registrados en orden cronológico inverso. Toda acción sensible queda registrada aquí: creación de vaults, accesos, contraseñas reveladas, intentos fallidos de autenticación.
+Devuelve los últimos 100 eventos registrados en orden cronológico inverso. Toda acción sensible queda registrada: creación y acceso a vaults, contraseñas reveladas, intentos fallidos de autenticación, modificaciones y eliminaciones.
 
 **No requiere autenticación.**
 
 **Respuesta `200`**
+
 ```json
 {
   "total": 47,
@@ -491,8 +561,8 @@ Devuelve los últimos 100 eventos registrados en orden cronológico inverso. Tod
       "vault_id": 1,
       "entry_id": 3,
       "detail": "reveal=true",
-      "ip": "127.0.0.1",
-      "created_at": "2026-04-10T22:05:00.000000"
+      "ip": "190.51.234.12",
+      "created_at": "2026-05-19T10:05:00.000000+00:00"
     }
   ]
 }
@@ -503,15 +573,16 @@ Devuelve los últimos 100 eventos registrados en orden cronológico inverso. Tod
 | Acción | Cuándo ocurre |
 |---|---|
 | `vault_created` | Al crear una vault |
-| `vault_accessed` | Al acceder con contraseña correcta |
+| `vault_accessed` | Al acceder con contraseña maestra correcta |
 | `vault_access_denied` | Al acceder con contraseña incorrecta |
 | `vault_deleted` | Al eliminar una vault |
 | `entry_created` | Al guardar una credencial |
-| `entry_accessed` | Al consultar una entrada |
+| `entry_accessed` | Al consultar una entrada (con o sin reveal) |
 | `entry_updated` | Al actualizar una entrada |
 | `entry_deleted` | Al eliminar una entrada |
 
 **Curl**
+
 ```bash
 curl http://localhost:5000/audit
 ```
@@ -520,8 +591,6 @@ curl http://localhost:5000/audit
 
 ### Andon Cord
 
-Cuando este activo (`POST`, `PATCH`, `DELETE`) devuelven `503`. Las operaciones de lectura (`GET`) siguen funcionando. El sistema se reanuda recién cuando todos los alertas estén resueltos.
-
 #### `POST /andon/pull` — Activar el cord
 
 Levanta una alerta y detiene todas las escrituras. Si Sentry está configurado, también se envía el evento allí.
@@ -529,6 +598,7 @@ Levanta una alerta y detiene todas las escrituras. Si Sentry está configurado, 
 **No requiere autenticación.**
 
 **Body**
+
 ```json
 {
   "message": "Posible compromiso de la clave de cifrado",
@@ -542,23 +612,35 @@ Levanta una alerta y detiene todas las escrituras. Si Sentry está configurado, 
 | `severity` | string | no | `low`, `medium` o `high` (por defecto: `high`) |
 
 **Respuesta `201`**
+
 ```json
 {
-  "system_halted": true,
-  "alert": {
+  "alerta": {
     "id": 1,
     "severity": "high",
     "message": "Posible compromiso de la clave de cifrado",
     "resolved": false,
-    "raised_at": "2026-04-10T22:10:00.000000",
+    "raised_at": "2026-05-19T10:30:00.000000+00:00",
     "resolved_at": null
-  }
+  },
+  "sistema_detenido": true
 }
 ```
 
 **Curl**
+
 ```bash
-curl -X POST http://localhost:5000/andon/pull -H "Content-Type: application/json" -d '{"message": "Posible compromiso de la clave de cifrado", "severity": "high"}'
+curl -X POST http://localhost:5000/andon/pull \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Posible compromiso de la clave de cifrado", "severity": "high"}'
+```
+
+**Mientras el cord esté activo**, cualquier intento de escritura devuelve:
+
+```json
+{
+  "error": "Andon Cord activo: escrituras detenidas"
+}
 ```
 
 ---
@@ -569,26 +651,21 @@ Marca una alerta como resuelta. Si era la última alerta abierta, las escrituras
 
 **No requiere autenticación.**
 
-**Body (opcional)**
-```json
-{
-  "root_cause": "Se rotó la clave de cifrado, no hubo brecha"
-}
-```
-
 **Respuesta `200`**
+
 ```json
 {
-  "system_halted": false,
-  "alert": {
+  "alerta": {
     "id": 1,
     "resolved": true,
-    "resolved_at": "2026-04-10T22:30:00.000000"
-  }
+    "resolved_at": "2026-05-19T10:35:00.000000+00:00"
+  },
+  "sistema_detenido": false
 }
 ```
 
 **Curl**
+
 ```bash
 curl -X POST http://localhost:5000/andon/resolve/1
 ```
@@ -602,6 +679,7 @@ Lista todos los eventos Andon (activos y resueltos), del más reciente al más a
 **No requiere autenticación.**
 
 **Curl**
+
 ```bash
 curl http://localhost:5000/andon/events
 ```
@@ -618,14 +696,14 @@ Todos los errores devuelven JSON con la misma estructura.
 | `401` | Contraseña maestra incorrecta o ausente |
 | `404` | El recurso no existe |
 | `405` | Método HTTP no permitido en esa ruta |
-| `409` | El recurso ya está en el estado solicitado |
-| `422` | Regla de negocio violada |
-| `503` | Andon cord activo — escrituras detenidas |
+| `409` | El recurso ya está en el estado solicitado (ej: alerta ya resuelta) |
+| `503` | Andon Cord activo — escrituras detenidas |
 
 **Ejemplo**
+
 ```json
 {
-  "error": "Invalid master password"
+  "error": "Contraseña maestra inválida"
 }
 ```
 
@@ -645,14 +723,14 @@ Las contraseñas se puntúan de 0 a 5. Cada criterio suma 1 punto:
 
 | Puntaje | Etiqueta |
 |---|---|
-| 0 | `very_weak` |
-| 1 | `weak` |
-| 2 | `fair` |
-| 3 | `good` |
-| 4 | `strong` |
-| 5 | `very_strong` |
+| 0 | `muy_debil` |
+| 1 | `debil` |
+| 2 | `aceptable` |
+| 3 | `buena` |
+| 4 | `fuerte` |
+| 5 | `muy_fuerte` |
 
-Las entradas con puntaje menor a 3 se reportan en `/metrics`.
+Las entradas con puntaje menor a 3 se reportan en `/metrics` como `entradas_debiles` y suman al `desperdicio_pct` (terminología Lean).
 
 ---
 
@@ -672,21 +750,21 @@ pytest test.py -m "not failing" -v
 pytest test.py -m failing -v
 ```
 
-La suite tiene 49 tests divididos en dos grupos:
+La suite tiene **49 tests** divididos en dos grupos:
 
-**44 tests que pasan** — cubren todos los flujos normales, casos de error, cifrado/descifrado, autenticación, Andon cord, métricas y auditoría.
+- **44 tests que pasan** — cubren los flujos normales: CRUD de vaults y entradas, casos de error, cifrado y descifrado, autenticación, cordón Andon, métricas y auditoría.
+- **5 fallos intencionales** (`TestIntentionalFailures`) — simulan bugs reales de producción (aceptar contraseñas débiles, entradas duplicadas, etc) para poblar el dashboard de Sentry durante la presentación.
 
-**5 fallos intencionales** (`TestIntentionalFailures`) — simulan bugs reales de producción (aceptar contraseñas débiles, entradas duplicadas, auditoría GDPR) para poblar el dashboard de Sentry durante la presentación.
+Los fallos intencionales están excluidos del CI con el filtro `-m "not failing"` y deben correrse manualmente.
 
 ---
 
 ## CI/CD
 
-El pipeline de GitHub Actions en `.github/workflows/ci.yml` se ejecuta en cada push a `main` o `develop` y en cada pull request a `main`.
+El pipeline de GitHub Actions en `.github/workflows/ci.yml` se ejecuta en cada push a `main` y en cada pull request hacia `main`.
 
-Corre dos jobs en secuencia:
+Corre **tres jobs** en secuencia:
 
-1. **test** — instala dependencias y corre `pytest -m "not failing"` (siempre verde)
-2. **docker** — construye la imagen Docker para validar el Dockerfile
-
-Los fallos intencionales están excluidos del CI con el filtro `-m "not failing"` y deben correrse manualmente.Flai
+1. **test** — instala dependencias y corre `pytest test.py -m "not failing" -v`. Si falla, frena todo.
+2. **docker** — buildea la imagen Docker multi-stage, genera los tags (`latest`, `main`, `sha-<corto>`, `sha-<largo>`) usando `docker/metadata-action`, y la publica en Docker Hub.
+3. **deploy** — invoca el Deploy Hook de Render con `curl`. Render pullea la imagen `latest` desde Docker Hub y reinicia el servicio.
