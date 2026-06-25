@@ -83,18 +83,16 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Trigger Render deploy hook con imagen por SHA
+      - name: Trigger Render deploy hook with SHA image
         env:
           HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
           IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/passmanager:sha-${{ github.sha }}
         run: |
-          echo "Deployando imagen: $IMAGE"
           # Al hook se le agrega el parametro imgURL para deployar el SHA exacto,
           # no el tag movil 'latest'.
           response=$(curl -s -o /dev/null -w "%{http_code}" \
             "${HOOK_URL}&imgURL=${IMAGE}")
           if [ "$response" != "200" ]; then
-            echo "::error::Render deploy hook respondió con código $response"
+            echo "::error::Render deploy hook status $response"
             exit 1
           fi
-          echo "Deploy de $IMAGE disparado correctamente"
