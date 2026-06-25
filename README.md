@@ -46,8 +46,12 @@ Esta es la **versión avanzada** del trabajo práctico integrador de DevOps. La 
 cp .env.example .env
 # Completar FERNET_KEY y opcionalmente SENTRY_DSN en el archivo .env
 docker compose up
-docker compose down -v # Para borrar todos los volumenes
+
+# Para detener y borrar el volumen de datos:
+docker compose down -v
 ```
+
+> El `docker compose up` pullea la imagen `lautiar/passmanager:latest` desde Docker Hub (no buildea local). Para correr cambios locales del código, usá la Opción B o buildeá manualmente con `docker build -t passmanager:dev .`
 
 #### Desde Docker Hub
 
@@ -79,6 +83,15 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 Pegar el resultado en el archivo `.env`.
 
+### Variables de entorno
+
+| Variable | Requerida | Por defecto | Descripción |
+|---|---|---|---|
+| `FERNET_KEY` | Recomendada | Genera una nueva en cada arranque (los datos viejos quedan inaccesibles) | Clave de cifrado simétrico para las contraseñas almacenadas |
+| `SENTRY_DSN` | No | (vacío) | URL de conexión a Sentry. Sin esta variable, el monitoreo se desactiva |
+| `DATABASE_URL` | No | `sqlite:////tmp/passmanager.db` | URL de la base de datos. Permite migrar a Postgres cambiando solo esta variable |
+| `PORT` | No | `5000` | Puerto en el que escucha la app. Render lo setea automáticamente |
+
 ---
 
 ## Estructura del proyecto
@@ -88,7 +101,7 @@ passmanager/
 ├── app.py                         # Aplicación principal
 ├── test.py                        # 49 tests (44 pasan + 5 fallan intencionalmente)
 ├── pytest.ini                     # Configuración de pytest
-├── Dockerfile                     # Multi-stage build
+├── Dockerfile                     # Multi-stage build, usuario no-root, healthcheck
 ├── docker-compose.yml
 ├── .dockerignore
 ├── requirements.txt
@@ -523,7 +536,7 @@ Devuelve un resumen en tiempo real del estado del sistema: cantidad de bóvedas,
   },
   "lean": {
     "entradas_debiles": 3,
-    "desperdicio_pct": 25.0,
+    "desperdicio_pct": 25.0
   },
   "seguridad": {
     "eventos_auditoria": 47,
@@ -767,5 +780,21 @@ El pipeline de GitHub Actions en `.github/workflows/ci.yml` se ejecuta en cada p
 Corre **tres jobs** en secuencia:
 
 1. **test** — instala dependencias y corre `pytest test.py -m "not failing" -v`. Si falla, frena todo.
-2. **docker** — buildea la imagen Docker multi-stage, genera los tags (`latest`, `main`, `sha-<corto>`, `sha-<largo>`) usando `docker/metadata-action`, y la publica en Docker Hub.
-3. **deploy** — invoca el Deploy Hook de Render con `curl`. Render pullea la imagen `latest` desde Docker Hub y reinicia el servicio.
+2. **docker** — buildea la imagen Docker multi-stage, genera los tags (`latest`, `main`, `sha-<largo>`) usando `docker/metadata-action`, y la publica en Docker Hub.
+3. **deploy** — dispara el Deploy Hook de Render pasándole la imagen por SHA específico (`imgURL=...passmanager:sha-<commit>`), de modo que Render despliega exactamente la versión que se testeó y buildeó, no el tag móvil `latest`.
+
+### Estrategia de tags
+
+Cada build genera varios tags simultáneos apuntando al mismo digest:
+
+- `latest` — solo en push a `main`
+- `main` — nombre de la rama
+- `sha-<largo>` — SHA completo del commit, usado para el deploy versionado y para rollback
+
+### Secrets requeridos
+
+| Secret | Uso |
+|---|---|
+| `DOCKERHUB_USERNAME` | Login en Docker Hub |
+| `DOCKERHUB_TOKEN` | Personal Access Token de Docker Hub |
+| `RENDER_DEPLOY_HOOK_URL` | URL del Deploy Hook del servicio en Render |
