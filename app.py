@@ -36,7 +36,7 @@ db = SQLAlchemy()
 def _fernet(app) -> Fernet:
     """Return (or lazily create) the Fernet cipher tied to the app."""
     if "_fernet" not in app.extensions:
-        key = app.config.get("") or Fernet.generate_key()
+        key = app.config.get("FERNET_KEY") or Fernet.generate_key()
         app.config["FERNET_KEY"] = key
         app.extensions["_fernet"] = Fernet(key)
     return app.extensions["_fernet"]
